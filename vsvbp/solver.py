@@ -58,7 +58,7 @@ def is_feasible(instance, use_dp=False):
     a feasible solution. Return False otherwise.
 
     We emphasize that this code is NOT optimized at all. We could
-    make each much faster by sarting with the heuristics which have
+    make each much faster by starting with the heuristics which have
     the best success chances."""
 
     # Run static heuristics

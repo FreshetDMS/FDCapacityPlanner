@@ -5,10 +5,14 @@ from vsvbp.solver import *
 
 
 class Partition(ConstrainedItem):
-    def __init__(self, requirements, pid, rid):
+    def __init__(self, requirements, topic, pid, rid):
         super(Partition, self).__init__(requirements)
+        self.topic = topic
         self.pid = pid
         self.rid = rid
+
+    def __repr__(self):
+        return str([self.requirements, self.topic, self.pid, self.rid])
 
     def is_constraint_satisfied(self, bin):
         for item in bin.items:
@@ -74,14 +78,14 @@ for t in topics:
     for p in range(partitions):
         items.append(Partition(
             [INDEX_SIZE + ((max_lag * message_size) / MILLION), per_part_datarate + replays * replay_rate,
-             per_part_datarate, (consumers + replication_factor - 1) * per_part_datarate + replays * replay_rate], p,
-            0))
+             per_part_datarate, (consumers + replication_factor - 1) * per_part_datarate + replays * replay_rate],
+            topic, p, 0))
         # Replicas also need to support replays and consumers incase leaders goes down
         for j in range(replication_factor - 1):
             items.append(Partition(
                 [INDEX_SIZE + ((max_lag * message_size) / MILLION), per_part_datarate + replays * replay_rate,
                  per_part_datarate, (consumers + replication_factor - 1) * per_part_datarate + replays * replay_rate],
-                p, j + 1))
+                topic, p, j + 1))
 
 max_network_out = max(items, key=lambda item: item.requirements[3]).requirements[3]
 max_ebs = max(items, key=lambda item: item.requirements[1]).requirements[1]
@@ -102,5 +106,4 @@ print 'selected instance type:', least_suitable_instance_type
 
 assignment = optimize(items, Bin(ec2_instance_types[least_suitable_instance_type]))
 print 'bin count:', len(assignment.bins)
-for b in assignment.bins:
-    print b.items
+print assignment
