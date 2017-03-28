@@ -38,7 +38,7 @@ class Instance:
 
 ################## Items ####################
 
-class Item:
+class Item(object):
     """ An item """
     def __init__(self, requirements):
         self.requirements = requirements[:]
@@ -46,6 +46,15 @@ class Item:
 
     def __repr__(self):
         return str(self.requirements)
+
+
+class ConstrainedItem(Item):
+    def __init__(self, requirements):
+        super(ConstrainedItem, self).__init__(requirements)
+
+    def is_constraint_satisfied(self, bin):
+        return True
+
 
 def vp_lower_bound(items, tbin):
     """ Return a lower bound on the minimum number of bins required
@@ -79,7 +88,15 @@ class Bin:
         return str([self.capacities,self.remaining])
 
     def feasible(self, item):
-        """ Return True iff item can be packed in this bin """
+        """ 
+        Return True iff item can be packed in this bin 
+            - Item cannot be packed in this bin if item constraints are not satisfied
+            - Or if there is not enough space left in the bin
+        """
+        if isinstance(item, ConstrainedItem):
+            if not item.is_constraint_satisfied(self):
+                return False
+
         for req, rem in itertools.izip_longest(item.requirements,self.remaining):
             if (req > rem):
                 return False
