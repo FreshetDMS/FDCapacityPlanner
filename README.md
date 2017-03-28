@@ -1,14 +1,7 @@
-Variable Size Vector Bin Packing
-================================
+Capacity Planner for Fast Data System
+=====================================
 
-This repository contains heuristics and results for the variable size vector bin
-packing problem.
+This repository contains a vector bin packing based capacity planning tool for distributed log stores.
 
-Problem and results are detailed in the paper
-http://hal.archives-ouvertes.fr/hal-00868016
+The tool is based on code from [Variable-Size-Vector-Bin-Packing](https://github.com/mgabay/Variable-Size-Vector-Bin-Packing). Details on algorithms and heuristics used in this tool can be found in paper '[Variable size vector bin packing heuristics - Application to the machine reassignment problem](http://hal.archives-ouvertes.fr/hal-00868016)'.
 
-The directory src/python provides a flexible implementation of the heuristics,
-in Python. Implemented measures and algorithms are not optimized but still run
-very fast using PyPy interpreter.
-
-Results are provided in the results directory.
