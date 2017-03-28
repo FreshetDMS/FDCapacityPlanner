@@ -1,5 +1,5 @@
-Capacity Planner for Fast Data System
-=====================================
+Capacity Planner for Distributed Log Stores
+===========================================
 
 This repository contains a vector bin packing based capacity planning tool for distributed log stores.
 
