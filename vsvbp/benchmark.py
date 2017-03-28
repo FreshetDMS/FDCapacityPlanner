@@ -327,7 +327,3 @@ def run_tests(instance, use_dp=False):
     instance.empty()
     ret = bfd_item_centric(instance.items[:], instance.bins[:], dp_normR, do_nothing)
     upd(instance,ret)
-
-
-if __name__ == "__main__":
-    run_benchmark()
