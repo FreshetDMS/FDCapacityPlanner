@@ -5,9 +5,9 @@ from setuptools import setup
 import unittest
 
 
+
 def my_test_suite():
-    test_loader = unittest.TestLoader()
-    test_suite = test_loader.discover('tests', pattern='test_*.py')
+    test_suite = unittest.defaultTestLoader.discover('tests', pattern='test_*.py')
     return test_suite
 
 
@@ -18,7 +18,8 @@ setup(
     author='Milinda Pathirage, Michael Gabay (Original author of vsvbp)',
     author_email='milinda.pathirage@gmail.com',
     packages=['vsvbp'],
-    test_suite='setup.my_test_suite',
+    test_suite='nose.collector',
+    tests_require=['nose'],
     include_package_data=True,
     scripts=['bin/fdcp'],
     url='https://github.com/FreshetDMS/FDCapacityPlanner',

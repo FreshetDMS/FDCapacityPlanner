@@ -46,7 +46,7 @@ class ConstrainedItem(Item):
 
 ################## Bins ####################
 
-class Bin:
+class Bin(object):
     """ A bin """
 
     def __init__(self, capacities):
