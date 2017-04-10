@@ -3,12 +3,6 @@ import itertools
 import operator
 
 
-################## Utility functions ####################
-
-
-
-################## Instance ####################
-
 class Instance:
     """ An instance """
 
@@ -23,8 +17,6 @@ class Instance:
         for i in self.items: i.size = 0
         for b in self.bins: b.empty()
 
-
-################## Items ####################
 
 class Item(object):
     """ An item """
@@ -41,10 +33,9 @@ class ConstrainedItem(Item):
     def __init__(self, requirements):
         super(ConstrainedItem, self).__init__(requirements)
 
-    def is_constraint_satisfied(self, bin):
+    def is_constraint_satisfied(self, container):
         return True
 
-################## Bins ####################
 
 class Bin(object):
     """ A bin """
@@ -69,7 +60,7 @@ class Bin(object):
                 return False
 
         for req, rem in itertools.izip_longest(item.requirements, self.remaining):
-            if (req > rem):
+            if req > rem:
                 return False
         return True
 
@@ -96,10 +87,6 @@ class Bin(object):
         """ Empty the bin """
         self.items = []
         self.remaining = self.capacities[:]
-
-
-################## Unit tests ####################
-
 
 
 if __name__ == "__main__":

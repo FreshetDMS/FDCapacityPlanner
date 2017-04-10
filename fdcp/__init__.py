@@ -1,29 +1,14 @@
-from operator import truediv, sub
-from vsvbp.container import ConstrainedItem, Bin
+from vsvbp.container import ConstrainedItem
 from vsvbp.solver import optimize
 import sys
+import logging
+
+logger = logging.getLogger("fdcp")
 
 MILLION = 1000000
 HUNDRED_THOUSAND = 100000
 INDEX_SIZE = 10
 FLUSH_DELAY_SECONDS = 30
-
-
-class EC2Instance(Bin):
-    def __init__(self, type, vcpus, memory, network_bw, ebs_bw, cost):
-        super(EC2Instance, self).__init__([memory, ebs_bw, network_bw, network_bw])
-        self.memory = memory
-        self.ebs_bw = ebs_bw
-        self.network_bw = network_bw
-        self.type = type
-        self.vcpus = vcpus
-        self.cost = cost
-
-    def __repr__(self):
-        return str([self.type, self.vcpus, self.capacities, self.remaining])
-
-    def utilization(self):
-        return map(truediv, map(sub, self.capacities, self.remaining), self.capacities)
 
 
 class Topic(object):
@@ -55,7 +40,7 @@ class Topic(object):
                                     ebs_bw_requirement, self.name, p, 0))
             for r in range(self.replication_factor - 1):
                 result.append(Partition(per_partition_mem_requirements, network_in_requirement, network_out_requirement,
-                                    ebs_bw_requirement, self.name, p, r + 1))
+                                        ebs_bw_requirement, self.name, p, r + 1))
         return result
 
 
@@ -95,10 +80,12 @@ class LogStoreWorkload(object):
 
 
 class LogStoreCapacityPlanner(object):
-    def __init__(self, node_types, workload):
+    def __init__(self, node_types, workload, retention_period):
         # This should be fixed to support instance types from different categories
+        # We need to get retention period as a parameter to calculate storage costs
         self.node_types = sorted(node_types, key=lambda n: n.vcpus)
         self.workload = workload
+        self.retention_period = retention_period
 
     def find_bin_lower_bound(self):
         partitions = self.workload.partitions()
@@ -108,7 +95,8 @@ class LogStoreCapacityPlanner(object):
         max_mem = max(partitions, key=lambda p: p.memory).memory
 
         for i, n in enumerate(self.node_types):
-            if n.memory > max_mem and n.network_bw > max_network_in and n.network_bw > max_network_out and n.ebs_bw > max_ebs_bw:
+            if n.memory > max_mem and n.network_bw > max_network_in and n.network_bw > max_network_out and \
+                            n.ebs_bw > max_ebs_bw:
                 return i
 
     def plan(self):
@@ -119,14 +107,13 @@ class LogStoreCapacityPlanner(object):
         best_instance = self.node_types[lb]
         for i in range(lb, len(self.node_types)):
             node = self.node_types[i]
-            assignment = optimize(self.workload.partitions(), node)
-            cost = len(assignment.bins) * node.cost
+            logger.info("Running optimize with bin type: " + str(node))
+            assignment = optimize(self.workload.partitions(), node, use_dp=False)
+            cost = len(assignment.bins) * node.cost  # TODO: Incorporate storage cost
+            logger.info("Optimal bins: " + str(len(assignment.bins)) + " and cost: " + str(cost))
             if cost < best_cost:
                 best_cost = cost
                 best_instance = node
                 best_config = assignment
 
         return best_config, best_instance
-
-
-

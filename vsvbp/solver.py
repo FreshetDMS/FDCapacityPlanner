@@ -9,49 +9,55 @@ from .heuristics import *
 from .generator import *
 from .measures import *
 import random
+import logging
 
-######## Create a list of heuristics with valid combinations of measures ########
-class HeuristicList:
+logger = logging.getLogger("vsvbp-solver")
+
+
+# Create a list of heuristics with valid combinations of measures
+class HeuristicList(object):
     pass
+
 
 __hlist = HeuristicList()
 
 # Static bfd ic/bc heuristics
 __hlist.static = [
-        (do_nothing, do_nothing),
-        (shuffleItemsOnce,shuffleBinsOnce),
-        (staticItemsOneOverC,staticBinsOneOverC),
-        (staticItemsOneOverR,staticBinsOneOverR),
-        (staticItemsROverC,staticBinsROverC)
-        ]
+    (do_nothing, do_nothing),
+    (shuffleItemsOnce, shuffleBinsOnce),
+    (staticItemsOneOverC, staticBinsOneOverC),
+    (staticItemsOneOverR, staticBinsOneOverR),
+    (staticItemsROverC, staticBinsROverC)
+]
 
 # Dynamic heuristics
 __hlist.dynamic = [
-        (shuffleItems,shuffleBins),
-        (dynamicItemsOneOverC,dynamicBinsOneOverC),
-        (dynamicItemsOneOverR,dynamicBinsOneOverR),
-        (dynamicItemsROverC,dynamicBinsROverC)
-        ]
+    (shuffleItems, shuffleBins),
+    (dynamicItemsOneOverC, dynamicBinsOneOverC),
+    (dynamicItemsOneOverR, dynamicBinsOneOverR),
+    (dynamicItemsROverC, dynamicBinsROverC)
+]
 
 # Bin balancing heuristics
 __hlist.balance = [
-        (do_nothing, do_nothing),
-        (shuffleItemsOnce,shuffleBinsOnce),
-        (shuffleItems,shuffleBins),
-        (staticItemsOneOverC,staticBinsOneOverC),
-        (dynamicItemsOneOverC,dynamicBinsOneOverC),
-        (staticItemsOneOverR,staticBinsOneOverR),
-        (dynamicItemsOneOverR,dynamicBinsOneOverR),
-        (staticItemsROverC,staticBinsROverC),
-        (dynamicItemsROverC,dynamicBinsROverC)
-        ]
+    (do_nothing, do_nothing),
+    (shuffleItemsOnce, shuffleBinsOnce),
+    (shuffleItems, shuffleBins),
+    (staticItemsOneOverC, staticBinsOneOverC),
+    (dynamicItemsOneOverC, dynamicBinsOneOverC),
+    (staticItemsOneOverR, staticBinsOneOverR),
+    (dynamicItemsOneOverR, dynamicBinsOneOverR),
+    (staticItemsROverC, staticBinsROverC),
+    (dynamicItemsROverC, dynamicBinsROverC)
+]
 
 # Dot Product heuristics
 __hlist.dotprod = [
-        (dp_nonorm, do_nothing),
-        (dp_normC, do_nothing),
-        (dp_normR, do_nothing)
-        ]
+    (dp_nonorm, do_nothing),
+    (dp_normC, do_nothing),
+    (dp_normR, do_nothing)
+]
+
 
 def is_feasible(instance, use_dp=False):
     """ Run all heuristics and return True iff a heuristic finds
@@ -61,44 +67,58 @@ def is_feasible(instance, use_dp=False):
     make each much faster by starting with the heuristics which have
     the best success chances."""
 
+    logger.debug("Running is_feasible with bins: " + str(len(instance.bins)))
+
     # Run static heuristics
+    logger.debug("Running static heuristics")
     for m1, m2 in __hlist.static:
         instance.empty()
         ret = bfd_item_centric(instance.items[:], instance.bins[:], m1, m2)
-        if not ret: return True
+        if not ret:
+            return True
 
     # Run item centric dynamic heuristics
+    logger.debug("Running dynamic heuristics")
     for m1, m2 in __hlist.dynamic:
         instance.empty()
         ret = bfd_item_centric(instance.items[:], instance.bins[:], m1, m2)
-        if not ret: return True
+        if not ret:
+            return True
 
     # Run bin centric dynamic heuristics
+    logger.debug("Running bin centric dynamic heuristics")
     for m1, m2 in __hlist.dynamic:
         instance.empty()
         ret = bfd_bin_centric(instance.items[:], instance.bins[:], m1, m2)
-        if not ret: return True
+        if not ret:
+            return True
 
     # Run bin balancing heuristics
+    logger.debug("Running bin balancing heuristics")
     for m1, m2 in __hlist.balance:
         instance.empty()
         ret = bin_balancing(instance.items[:], instance.bins[:], m1, m2)
-        if not ret: return True
+        if not ret:
+            return True
 
     # Run single bin balancing heuristics
+    logger.debug("Running single bin balancing heuristics")
     for m1, m2 in __hlist.balance:
         instance.empty()
         ret = bin_balancing(instance.items[:], instance.bins[:], m1, m2, single=True)
-        if not ret: return True
+        if not ret:
+            return True
 
     # Run Dot Product heuristics
     if not use_dp:
         return False
 
+    logger.debug("Running dot product heuristics")
     for m1, m2 in __hlist.dotprod:
         instance.empty()
         ret = bfd_item_centric(instance.items[:], instance.bins[:], m1, m2)
-        if not ret: return True
+        if not ret:
+            return True
 
     # No solution found
     return False
@@ -117,7 +137,7 @@ def optimize(items, tbin, use_dp=False, seed=None):
     # replace by the following line to return lower bounds
     # return Instance([], [tbin]*vp_lower_bound(items, tbin))
 
-    if seed != None:
+    if seed is not None:
         random.seed(seed)
 
     lb = vp_lower_bound(items, tbin)
