@@ -123,8 +123,9 @@ class StorageBin(object):
         return sum(self.remaining)
 
     def effective_throughput(self):
+        total_read_pct = float(self.reads) / self.capacity_of_items[1]
         return self.storage_type.effective_iops(self.io_op_size_kb, self.instance_type.storage_bandwidth(),
-                                                self.num_logs + 1) * self.io_op_size_kb
+                                                total_read_pct, self.num_logs + 1) * self.io_op_size_kb
 
 
 class InstanceBin(Bin):
