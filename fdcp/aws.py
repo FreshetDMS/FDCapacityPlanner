@@ -105,11 +105,8 @@ class StorageBin(object):
         self.num_logs += 1
         self.capacity_of_items = [x + y for x, y in zip(self.capacity_of_items, item)]
         self.reads += item[1] * read_pct
-        total_read_pct = float(self.reads) / self.capacity_of_items[1]
         self.remaining = [self.storage_type.size() - self.capacity_of_items[0],
-                          self.storage_type.effective_iops(self.io_op_size_kb, self.instance_type.storage_bandwidth(),
-                                                           total_read_pct, self.num_logs + 1) - self.capacity_of_items[
-                              1]]
+                          self.effective_iops() - self.capacity_of_items[1]]
 
     def feasible(self, item):
         for i, c in enumerate(item):
@@ -122,10 +119,13 @@ class StorageBin(object):
         # TODO: of mega bytes. Fix this.
         return sum(self.remaining)
 
-    def effective_throughput(self):
+    def effective_iops(self):
         total_read_pct = float(self.reads) / self.capacity_of_items[1]
         return self.storage_type.effective_iops(self.io_op_size_kb, self.instance_type.storage_bandwidth(),
-                                                total_read_pct, self.num_logs + 1) * self.io_op_size_kb
+                                                total_read_pct, self.num_logs + 1)
+
+    def effective_throughput(self):
+        return self.effective_iops() * self.io_op_size_kb
 
 
 class InstanceBin(Bin):
