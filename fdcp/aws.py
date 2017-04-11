@@ -59,12 +59,24 @@ class StorageType(Enum):
         # Predicted IOPS assuming there is only no random io
         # Things to consider
         #   - Max IOPS change with the I/O operation size
+        # We need to collect data for each storage type
+        # Storage Type | 64 KB | 128 KB | 256 KB | 512 KB | 1MB
+        # io1          |       |        |        |        |
+        # gp2          |       |        |        |        |
+        # st1          |       |        |        |        |
+        # hdd          |       |        |        |        |
         pass
 
     def effective_iops(self, io_op_size_kb, storage_bw, rand_factor):
         # Do we need to consider total storage bandwidth or remaining bandwidth? I think total because effective
         # bandwidth is limited by dedicated storage bandwidth
-        # 
+        # We need to collect data for all the storage types for io size and number of logs
+        # io size | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10  <-- num logs
+        #  64KB   |
+        # 128KB   |
+        # 256KB   |
+        #   ...   |
+        #   1MB   |
         pass
 
     def hourly_cost(self, size, provisioned_iops):
