@@ -1,4 +1,5 @@
 from enum import Enum
+from fdcp import Partition
 from math import ceil
 from vsvbp.container import Bin
 
@@ -155,6 +156,15 @@ class InstanceBin(Bin):
         self.remaining[2] = max_sb.remaining[1]
 
         self.items.append(item)
+
+    def add(self, item):
+        if not isinstance(item, Partition):
+            raise Exception('Only items of type Partition is supported at this stage.')
+
+        if self.feasible(item):
+            self.insert(item)
+            return True
+        return False
 
     def allocate_new_storage_bins_if_necessary(self):
         # We can do this because effective throughput goes down as we add more logs to storage bin
