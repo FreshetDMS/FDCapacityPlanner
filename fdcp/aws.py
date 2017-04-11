@@ -68,7 +68,7 @@ class StorageType(Enum):
         # hdd          |       |        |        |        |
         pass
 
-    def effective_iops(self, io_op_size_kb, storage_bw, rand_factor):
+    def effective_iops(self, io_op_size_kb, storage_bw, reads_pct, rand_factor):
         # Do we need to consider total storage bandwidth or remaining bandwidth? I think total because effective
         # bandwidth is limited by dedicated storage bandwidth
         # We need to collect data for all the storage types for io size and number of logs
@@ -93,18 +93,23 @@ class StorageBin(object):
         self.capacity = []
         self.remaining = []
         self.capacity_of_items = []
+        self.reads = 0
 
-    def add_item(self, item):
+    def add_item(self, item, read_pct):
         """
         Add a new item to storage bin.
         :param item: array representing IOPS and space requirements [size_req, iops_req]
+        :param read_pct: Reads as a percentage of total IOPS requirement
         :return: None
         """
         self.num_logs += 1
         self.capacity_of_items = [x + y for x, y in zip(self.capacity_of_items, item)]
+        self.reads += item[1] * read_pct
+        total_read_pct = float(self.reads) / self.capacity_of_items[1]
         self.remaining = [self.storage_type.size() - self.capacity_of_items[0],
                           self.storage_type.effective_iops(self.io_op_size_kb, self.instance_type.storage_bandwidth(),
-                                                           self.num_logs + 1) - self.capacity_of_items[1]]
+                                                           total_read_pct, self.num_logs + 1) - self.capacity_of_items[
+                              1]]
 
     def feasible(self, item):
         for i, c in enumerate(item):
@@ -139,7 +144,7 @@ class InstanceBin(Bin):
             # But if storage capacity is not enough going to the next bin may be the solution
             raise Exception('Storage capacity requirements exceed remaining storage capacity.')
 
-        sb.add_item([item.requirements[1], item.requirements[2]])
+        sb.add_item([item.requirements[1], item.requirements[2]], item.reads)
 
         self.allocate_new_storage_bins_if_necessary()
 
