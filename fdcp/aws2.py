@@ -1,4 +1,5 @@
 from enum import Enum
+from math import ceil
 from vsvbp.container import Bin
 
 INSTANCE_MODEL_LIST = ["m4.2xlarge", "m4.4xlarge", "m4.10xlarge", "m4.16xlarge", "d2.2xlarge", "d2.4xlarge",
@@ -96,7 +97,12 @@ class StorageBin(object):
         return True
 
     def vector_sum_of_remaining(self):
+        # TODO: This is not a proper size measure since size is in thousands of giga bytes and bandwidth is in hundreds
+        # TODO: of mega bytes. Fix this.
         return sum(self.remaining)
+
+    def effective_throughput(self):
+        return  -1
 
 
 class InstanceBin(Bin):
@@ -107,36 +113,57 @@ class InstanceBin(Bin):
         self.storage_type = storage_type
         self.io_op_size_kb = io_op_size_kb
         self.storage_bins = [StorageBin(storage_type, instance_type, io_op_size_kb) for i in
-                             range(InstanceBin.compute_volume_count())]
+                             range(InstanceBin.compute_volume_count(instance_type, storage_type, io_op_size_kb))]
 
     def insert(self, item):
-        # Select storage bin
-        # Insert item
-        # Check whether effective capacity of storage bins went below effective bandwidth allocated for storage and
-        # add more storage bins.
-        # Calculate remaining capacity
-        # Report both size as well as iops for storage
-        pass
+        sb = self.select_storage_bin(item.requirements[1], item.requirements[2])
+        if sb is None:
+            # There is a possibility of adding a new storage bin and adjusting remaining storage bw as needed.
+            # But if storage capacity is not enough going to the next bin may be the solution
+            raise Exception('Storage capacity requirements exceed remaining storage capacity.')
+
+        sb.add_item([item.requirements[1], item.requirements[2]])
+
+        self.allocate_new_storage_bins_if_necessary()
+
+        for i, req in enumerate(item.requirements):
+            if i != 1 and i != 2:
+                self.remaining[i] -= req
+
+        max_sb = next(iter(sorted(self.storage_bins, key=lambda sbin: sbin.vector_sum_of_remaining(), reverse=True)),
+                      None)
+        if max_sb is None:
+            raise Exception('Storage bin with max remaining capacity cannot be none.')
+
+        self.remaining[1] = max_sb.remaining[0]
+        self.remaining[2] = max_sb.remaining[1]
+
+        self.items.append(item)
+
+    def allocate_new_storage_bins_if_necessary(self):
+        # We can do this because effective throughput goes down as we add more logs to storage bin
+        effective_storage_throughput = sum(sb.effective_throughput() for sb in self.storage_bins)
+        if effective_storage_throughput < self.instance_type.storage_bandwidth():
+            self.storage_bins.append(StorageBin(self.storage_type, self.instance_type, self.io_op_size_kb))
 
     def storage_bin_count(self):
         return len(self.storage_bins)
 
     # Private methods
-    def select_storage_bin(self, req):
-        for sb in sorted(self.storage_bins, key=lambda sb: sb.vector_sum_of_remaining()):
-            if sb.feasible(req):
+    def select_storage_bin(self, size_req, iops_req):
+        for sb in sorted(self.storage_bins, key=lambda sbin: sbin.vector_sum_of_remaining()):
+            if sb.feasible([size_req, iops_req]):
                 return sb
         return None
 
-    def compute_remaining_capacity(self):
-        pass
-
     @classmethod
-    def compute_initial_capacity(cls, instance_type, storage_type, io_size_kb):
+    def compute_initial_capacity(cls, instance_type, storage_type, io_op_size_kb):
         return [instance_type.memory(), storage_type.size(),
-                storage_type.iops(io_size_kb, instance_type.storage_bandwidth()),
+                storage_type.iops(io_op_size_kb, instance_type.storage_bandwidth()),
                 instance_type.network_bandwidth(), instance_type.network_bandwidth()]
 
     @classmethod
-    def compute_volume_count(cls):
-        return 0
+    def compute_volume_count(cls, instance_type, storage_type, io_op_size_kb):
+        return int(ceil(((instance_type.storage_bandwidth() * KBS_TO_MB) / io_op_size_kb) /
+                        storage_type.iops(io_op_size_kb,
+                                          instance_type.storage_bandwidth())))
