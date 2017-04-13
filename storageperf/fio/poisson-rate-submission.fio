@@ -1,0 +1,10 @@
+[poisson-rate-submit]
+size=20G
+rw=rw
+rwmixwrite=70
+direct=1
+io_submit_mode=offload
+rate_process=poisson
+group_reporting
+nrfiles=2
+directory=/media/disk1
