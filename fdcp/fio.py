@@ -41,15 +41,16 @@ class FIOJob(object):
         return fio_args_list
 
     def run(self):
-        args = [self.fio_path]
+        args = [self.fio_path, "--minimal"]
+
+        if self.group_reporting:
+            args.append("--group_reporting")
+
+        if self.unified_reporting:
+            args.append("--unified_rw_reporting=1")
+
         if self.config_path is None and not bool(self.job_params):
             args.extend(self.prep_job_params())
-
-            if self.group_reporting:
-                args.append("--group_reporting")
-
-            if self.unified_reporting:
-                args.append("--unified_rw_reporting=1")
         elif self.config_path is not None:
             args.append(self.config_path)
         else:
