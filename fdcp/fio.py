@@ -16,11 +16,14 @@ def is_exe(path):
 
 
 class FIOJob(object):
-    def __init__(self, fio_path=None, group_reporting=True, unified_reporting=False):
+    def __init__(self, config_path=None, fio_path=None, block_size="128k", group_reporting=True,
+                 unified_reporting=False):
+        self.config_path = config_path
         self.fio_path, self.fio_version = FIOJob.fio_path_and_version(fio_path)
         self.job_params = {}
         self.group_reporting = group_reporting
         self.unified_reporting = unified_reporting
+        self.block_size = block_size
         self.success = False
         self.output = None
         self.terse_output = []
@@ -32,19 +35,26 @@ class FIOJob(object):
         self.job_params[key] = value
 
     def prep_job_params(self):
-        fio_args_list = [self.fio_path]
+        fio_args_list = []
         for k, v in self.job_params.iteritems():
             fio_args_list.append("--" + k + "=" + v)
         return fio_args_list
 
     def run(self):
-        args = self.prep_job_params()
+        args = [self.fio_path]
+        if self.config_path is None and not bool(self.job_params):
+            args.extend(self.prep_job_params())
 
-        if self.group_reporting:
-            args.append("--group_reporting")
+            if self.group_reporting:
+                args.append("--group_reporting")
 
-        if self.unified_reporting:
-            args.append("--unified_rw_reporting=1")
+            if self.unified_reporting:
+                args.append("--unified_rw_reporting=1")
+        elif self.config_path is not None:
+            args.append(self.config_path)
+        else:
+            logging.error("Both fio configuration path and job parameters are empty.")
+            raise RuntimeError("Empty fio configuration path and job parameters")
 
         logging.info(str(args))
 
@@ -71,9 +81,9 @@ class FIOJob(object):
         return int(self.terse_output[TERSE_TOTAL_IO_WRITE_POSITION])
 
     def get_write_latency(self):
-        return [float(self.terse_output[TERSE_WRITE_LATENCY_START_POSITION]),          # min
-                float(self.terse_output[TERSE_WRITE_LATENCY_START_POSITION + 1]),      # max
-                float(self.terse_output[TERSE_WRITE_LATENCY_START_POSITION + 2])]      # mean
+        return [float(self.terse_output[TERSE_WRITE_LATENCY_START_POSITION]),  # min
+                float(self.terse_output[TERSE_WRITE_LATENCY_START_POSITION + 1]),  # max
+                float(self.terse_output[TERSE_WRITE_LATENCY_START_POSITION + 2])]  # mean
 
     def get_read_latency(self):
         return [float(self.terse_output[TERSE_READ_LATENCY_START_POSITION]),
