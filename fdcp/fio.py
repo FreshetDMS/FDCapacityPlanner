@@ -16,14 +16,12 @@ def is_exe(path):
 
 
 class FIOJob(object):
-    def __init__(self, config_path=None, fio_path=None, block_size="128k", group_reporting=True,
-                 unified_reporting=False):
+    def __init__(self, config_path=None, fio_path=None, group_reporting=True, unified_reporting=False):
         self.config_path = config_path
         self.fio_path, self.fio_version = FIOJob.fio_path_and_version(fio_path)
         self.job_params = {}
         self.group_reporting = group_reporting
         self.unified_reporting = unified_reporting
-        self.block_size = block_size
         self.success = False
         self.output = None
         self.terse_output = []
@@ -98,6 +96,21 @@ class FIOJob(object):
         return int(self.terse_output[TERSE_TOTAL_WRITE_THROUGHPUT_POSITION])
 
     @classmethod
+    def which(cls, program):
+        fpath, fname = os.path.split(program)
+        if fpath:
+            if is_exe(program):
+                return program
+        else:
+            for path in os.environ["PATH"].split(os.pathsep):
+                path = path.strip('"')
+                exe_file = os.path.join(path, program)
+                if is_exe(exe_file):
+                    return exe_file
+
+        return None
+
+    @classmethod
     def fio_path_and_version(cls, fio_path):
         fio_version = None
         if fio_path is None:
@@ -114,4 +127,4 @@ class FIOJob(object):
         fio = subprocess.Popen([fio_path, "--version"], stdout=subprocess.PIPE)
         fio_version = fio.communicate()[0]
 
-        return fio_path, fio_version
+        return fio_path, fio_version.rstrip('\n')
