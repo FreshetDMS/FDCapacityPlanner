@@ -4,6 +4,9 @@ from math import ceil
 import os
 import logging
 import csv
+import sys
+import yaml
+
 
 BLOCK_SIZES = ["64k", "128k", "256k", "512k", "1024k"]
 WRITE_MIXES = [100, 90, 80, 70, 60, 50, 40, 30, 20, 10, 0]
@@ -96,5 +99,13 @@ def run_bench(bsizes, wmixes, tlogs, llogs, directory, rate_process, fio_path, r
                         delete_folder_content(directory)  # cleaning up data directory
 
 if __name__ == "__main__":
-    run_bench(["128k"], [60], [6], [50], '',
-              POISSON_RATE_PROCESS, '/usr/local/bin/fio', 'fio-result.csv')
+    # run_bench(["128k"], [60], [6], [50], '',
+    #           POISSON_RATE_PROCESS, '/usr/local/bin/fio', 'fio-result.csv')
+    if len(sys.argv) < 3:
+        logging.error("Missing configuration file.")
+        logging.error("Usage: python csbench.py config.yml")
+        exit(-1)
+
+    config = yaml.load(file(sys.argv[1], 'r'))
+    run_bench(config['block-sizes'], config['write-mixes'], config['total-logs'], config['leader-logs'], config['data-directory'],
+              config['rate-process'], config['fio-path'], sys.argv[2])
