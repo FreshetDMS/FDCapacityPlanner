@@ -68,8 +68,13 @@ def run_bench(bsizes, wmixes, tlogs, llogs, directory, rate_process, fio_path, r
                     for ll in llogs:
                         leaders = int(ceil(tl * (ll / 100.0)))
                         followers = tl - leaders
-                        leaders_size = FILE_SIZE * leaders
-                        followers_size = FILE_SIZE * followers
+                        leaders_size = FILE_SIZE
+                        followers_size = FILE_SIZE
+
+                        if 1 < tl < 8:
+                            leaders_size += leaders_size
+                            followers_size += followers_size
+
                         job_file = "{}-{}-{}-{}-{}-{}-{}.ini".format(bs, wm, tl, leaders, followers, FILE_SIZE,
                                                                      rate_process)
                         with open(job_file, 'w') as f:
