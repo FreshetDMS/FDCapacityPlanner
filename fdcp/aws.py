@@ -1,7 +1,10 @@
 from enum import Enum
 from fdcp import Partition
 from math import ceil
+from sklearn.externals import joblib
 from vsvbp.container import Bin
+import os
+import numpy as np
 
 INSTANCE_MODEL_LIST = ["m4.2xlarge", "m4.4xlarge", "m4.10xlarge", "m4.16xlarge", "d2.2xlarge", "d2.4xlarge",
                        "d2.8xlarge"]
@@ -17,6 +20,8 @@ STORAGE_HOURLY_COST = [lambda (size, iops): 0.125 * size + 0.065 * iops, lambda 
                        lambda (size, iops): 0.045 * size, lambda (size, iops): 0]
 
 KBS_TO_MB = 1024
+
+HDD_IOPS_MODEL = joblib.load(os.path.join(os.path.dirname(__file__)), 'models/hdd-model.pkl')
 
 
 class InstanceType(Enum):
@@ -68,7 +73,7 @@ class StorageType(Enum):
         # hdd          |       |        |        |        |
         pass
 
-    def effective_iops(self, io_op_size_kb, storage_bw, reads_pct, rand_factor):
+    def effective_iops(self, io_op_size_kb, storage_bw, leaders, followers, write_pct):
         # Do we need to consider total storage bandwidth or remaining bandwidth? I think total because effective
         # bandwidth is limited by dedicated storage bandwidth
         # We need to collect data for all the storage types for io size and number of logs
@@ -78,7 +83,11 @@ class StorageType(Enum):
         # 256KB   |
         #   ...   |
         #   1MB   |
-        pass
+        if self.value == 4:
+            return min(HDD_IOPS_MODEL.predict([[io_op_size_kb, leaders, followers, write_pct]])[0],
+                       (storage_bw * 1024.0) / io_op_size_kb)
+        else:
+            return -1
 
     def hourly_cost(self, size, provisioned_iops):
         return STORAGE_HOURLY_COST_FACTOR * STORAGE_HOURLY_COST[self.value - 1](size, provisioned_iops)
