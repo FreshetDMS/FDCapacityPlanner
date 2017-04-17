@@ -1,5 +1,4 @@
 block-sizes:
-  - 64k
   - 128k
   - 256k
   - 512k
