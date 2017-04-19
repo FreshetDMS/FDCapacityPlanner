@@ -226,7 +226,6 @@ class InstanceBin(Bin):
         utilization = [float(c - r)/float(c) for c, r in zip(self.capacities, self.remaining)]
         utilization[1] = float(used_capacity[0]) / float(total_storage_capacity[0])
         utilization[2] = float(used_capacity[1]) / float(total_storage_capacity[1])
-        print total_storage_capacity[1]
         return utilization
 
     def __repr__(self):

@@ -1,8 +1,8 @@
 from vsvbp.solver import optimize
-from fdcp import Partition
 from fdcp.aws import *
 import logging
 import sys
+from sets import Set
 
 logging.basicConfig(format='%(asctime)s %(message)s')
 logging.getLogger().addHandler(logging.StreamHandler())
@@ -93,7 +93,6 @@ class LogStoreCapacityPlanner(object):
 
     def plan(self):
         best_cost = sys.maxint
-        best_instance = None
         best_config = None
         lb = self.find_bin_lower_bound()
         best_instance = self.node_types[lb]
@@ -107,11 +106,18 @@ class LogStoreCapacityPlanner(object):
                 best_cost = cost
                 best_instance = node
                 best_config = assignment
+        LogStoreCapacityPlanner.verify(best_config)
+        return {'assignment': best_config, 'bin-type': best_instance}
 
-        return {'assignment': best_config, 'instance type': best_instance}
-
-    def verify(self):
-        pass
+    @classmethod
+    def verify(cls, assignment):
+        for b in assignment.bins:
+            partitions = Set()
+            for i in b.items:
+                if partitions.intersection(Set([i.pid])):  # make this work across any capacity planner
+                    raise RuntimeError('Replicas of same partition cannot be in same bin.')
+                else:
+                    partitions.add(i.pid)
 
 
 if __name__ == "__main__":
@@ -120,5 +126,5 @@ if __name__ == "__main__":
     workload.add_topic(Topic("t2", 200000, 234, 10, 2, 2, 1, 400000, 15, 12))
     cp = LogStoreCapacityPlanner([InstanceBin(InstanceType.D2_2X, StorageType.D2HDD)], workload)
     p = cp.plan()
-    print p
+    print p['assignment'], p['bin-type']
     print 'Bin Count:', len(p['assignment'].bins)
