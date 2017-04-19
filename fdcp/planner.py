@@ -119,11 +119,12 @@ class LogStoreCapacityPlanner(object):
                 else:
                     partitions.add(i.pid)
 
+# TODO: Need to understand Kafka network utilization
 
 if __name__ == "__main__":
     workload = LogStoreWorkload()
-    workload.add_topic(Topic("t1", 100000, 124, 5, 2, 3, 1, 200000, 10, 12))
-    workload.add_topic(Topic("t2", 200000, 234, 10, 2, 2, 1, 400000, 15, 12))
+    workload.add_topic(Topic("t1", 100000, 124, 5, 2, 3, 1, 200000, 10, 48))
+    workload.add_topic(Topic("t2", 200000, 234, 10, 2, 2, 1, 400000, 15, 48))
     cp = LogStoreCapacityPlanner([InstanceBin(InstanceType.D2_2X, StorageType.D2HDD)], workload)
     p = cp.plan()
     print p['assignment'], p['bin-type']

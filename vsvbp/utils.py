@@ -23,7 +23,8 @@ def vp_lower_bound(items, tbin):
     """ Return a lower bound on the minimum number of bins required
     assuming that all bins have the same capacities as tbin.
     This is a lower bound for the vector packing problem """
-    if not items: return 0
+    if not items:
+        return 0
 
     reqs = [0] * len(tbin.capacities)
     for i in items:

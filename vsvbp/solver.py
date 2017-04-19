@@ -141,7 +141,7 @@ def optimize(items, tbin, use_dp=False, seed=None, aws=False):
     if seed is not None:
         random.seed(seed)
 
-    lb = vp_lower_bound(items, tbin)
+    lb = int(math.ceil(vp_lower_bound(items, tbin)))
     ub = len(items)
     best = None
     while lb <= ub:
