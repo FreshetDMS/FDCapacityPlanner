@@ -1,8 +1,11 @@
 from vsvbp.solver import optimize
 from fdcp import Partition
+from fdcp.aws import *
 import logging
 import sys
 
+logging.basicConfig(format='%(asctime)s %(message)s')
+logging.getLogger().addHandler(logging.StreamHandler())
 logger = logging.getLogger('planner')
 
 MILLION = 1000000
@@ -13,7 +16,8 @@ FLUSH_DELAY_SECONDS = 30
 
 class Topic(object):
     def __init__(self, name, produce_rate, mean_msg_size, num_partitions, replication_factor, num_consumers,
-                 num_replays, mean_replay_rate, max_consumer_lag, allocate_read_capacity_for_replicas=False):
+                 num_replays, mean_replay_rate, max_consumer_lag, retention_period,
+                 allocate_read_capacity_for_replicas=False):
         self.name = name
         self.produce_rate = produce_rate
         self.mean_msg_size = mean_msg_size
@@ -24,12 +28,14 @@ class Topic(object):
         self.mean_replay_rate = mean_replay_rate
         self.max_consumer_lag = max_consumer_lag
         self.allocate_read_capacity_for_replicas = allocate_read_capacity_for_replicas
+        self.retention_period = retention_period
 
     def partitions(self):
         result = []
         per_partition_produce_rate_mbps = ((self.produce_rate * self.mean_msg_size) / MILLION) / self.num_partitions
+        size_req = per_partition_produce_rate_mbps * self.retention_period * 3600
         per_partition_replay_rate = ((self.mean_replay_rate * self.mean_msg_size) / MILLION) / self.num_partitions
-        per_partition_mem_requirements = max((self.max_consumer_lag * self.mean_msg_size) / MILLION,
+        per_partition_mem_requirements = max(self.max_consumer_lag * per_partition_produce_rate_mbps,
                                              FLUSH_DELAY_SECONDS * per_partition_produce_rate_mbps)
         reads = self.num_replays * per_partition_replay_rate
         ebs_bw_requirement = per_partition_produce_rate_mbps + reads
@@ -39,12 +45,13 @@ class Topic(object):
                                   per_partition_produce_rate_mbps + self.num_replays * per_partition_replay_rate
         for p in range(self.num_partitions):
             result.append(Partition(per_partition_mem_requirements, network_in_requirement, network_out_requirement,
-                                    ebs_bw_requirement, reads_pct, self.name, p, 0))
+                                    ebs_bw_requirement, size_req, reads_pct, self.name, p, 0))
             for r in range(self.replication_factor - 1):
                 result.append(
                     Partition(per_partition_mem_requirements, network_in_requirement, network_out_requirement,
                               ebs_bw_requirement if self.allocate_read_capacity_for_replicas else
-                              per_partition_replay_rate,
+                              per_partition_produce_rate_mbps,
+                              size_req,
                               reads_pct if self.allocate_read_capacity_for_replicas else 0.0, self.name, p,
                               r + 1))
         return result
@@ -65,23 +72,23 @@ class LogStoreWorkload(object):
 
 
 class LogStoreCapacityPlanner(object):
-    def __init__(self, node_types, workload, retention_period):
+    def __init__(self, node_types, workload):
         # This should be fixed to support instance types from different categories
         # We need to get retention period as a parameter to calculate storage costs
-        self.node_types = sorted(node_types, key=lambda n: n.vcpus)
+        self.node_types = sorted(node_types, key=lambda n: n.instance_type.vcpus())
         self.workload = workload
-        self.retention_period = retention_period
 
     def find_bin_lower_bound(self):
         partitions = self.workload.partitions()
         max_network_out = max(partitions, key=lambda p: p.network_out).network_out
         max_network_in = max(partitions, key=lambda p: p.network_in).network_in
-        max_ebs_bw = max(partitions, key=lambda p: p.ebs_bw).ebs_bw
+        max_storage_bw = max(partitions, key=lambda p: p.storage_bw).storage_bw
         max_mem = max(partitions, key=lambda p: p.memory).memory
 
         for i, n in enumerate(self.node_types):
-            if n.memory > max_mem and n.network_bw > max_network_in and n.network_bw > max_network_out and \
-                            n.ebs_bw > max_ebs_bw:
+            if n.instance_type.memory() > max_mem and n.instance_type.network_bandwidth() > max_network_in and \
+                            n.instance_type.network_bandwidth() > max_network_out and \
+                            n.instance_type.storage_bandwidth() > max_storage_bw:
                 return i
 
     def plan(self):
@@ -93,12 +100,25 @@ class LogStoreCapacityPlanner(object):
         for i in range(lb, len(self.node_types)):
             node = self.node_types[i]
             logger.info("Running optimize with bin type: " + str(node))
-            assignment = optimize(self.workload.partitions(), node, use_dp=False)
-            cost = len(assignment.bins) * node.cost  # TODO: Incorporate storage cost
+            assignment = optimize(self.workload.partitions(), node, use_dp=False, aws=True)
+            cost = len(assignment.bins) * node.hourly_cost()
             logger.info("Optimal bins: " + str(len(assignment.bins)) + " and cost: " + str(cost))
             if cost < best_cost:
                 best_cost = cost
                 best_instance = node
                 best_config = assignment
 
-        return best_config, best_instance
+        return {'assignment': best_config, 'instance type': best_instance}
+
+    def verify(self):
+        pass
+
+
+if __name__ == "__main__":
+    workload = LogStoreWorkload()
+    workload.add_topic(Topic("t1", 100000, 124, 5, 2, 3, 1, 200000, 10, 12))
+    workload.add_topic(Topic("t2", 200000, 234, 10, 2, 2, 1, 400000, 15, 12))
+    cp = LogStoreCapacityPlanner([InstanceBin(InstanceType.D2_2X, StorageType.D2HDD)], workload)
+    p = cp.plan()
+    print p
+    print 'Bin Count:', len(p['assignment'].bins)

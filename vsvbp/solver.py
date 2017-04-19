@@ -8,6 +8,7 @@ from .container import *
 from .heuristics import *
 from .generator import *
 from .measures import *
+from fdcp.aws import InstanceBin
 import random
 import logging
 
@@ -124,7 +125,7 @@ def is_feasible(instance, use_dp=False):
     return False
 
 
-def optimize(items, tbin, use_dp=False, seed=None):
+def optimize(items, tbin, use_dp=False, seed=None, aws=False):
     """ Performs a binary search and returns the best solution
         found for the vector bin packing problem.
 
@@ -145,7 +146,10 @@ def optimize(items, tbin, use_dp=False, seed=None):
     best = None
     while lb <= ub:
         mid = (lb + ub) / 2
-        bins = [Bin(tbin.capacities) for i in xrange(mid)]
+        if not aws:
+            bins = [Bin(tbin.capacities) for i in xrange(mid)]
+        else:
+            bins = [InstanceBin(tbin.instance_type, tbin.storage_type, tbin.io_op_size_kb) for i in xrange(mid)]
         inst = Instance(items[:], bins)
         if is_feasible(inst, use_dp):
             best = inst

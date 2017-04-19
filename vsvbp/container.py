@@ -14,8 +14,10 @@ class Instance:
         return "Items:\n" + str(self.items) + "\nBins:\n" + str(self.bins)
 
     def empty(self):
-        for i in self.items: i.size = 0
-        for b in self.bins: b.empty()
+        for i in self.items:
+            i.size = 0
+        for b in self.bins:
+            b.empty()
 
 
 class Item(object):
@@ -47,7 +49,7 @@ class Bin(object):
         self.size = 0
 
     def __repr__(self):
-        return str([self.capacities, self.remaining])
+        return str(["capacity: " + str(self.capacities), "remaining: " + str(self.remaining)])
 
     def feasible(self, item):
         """ 
