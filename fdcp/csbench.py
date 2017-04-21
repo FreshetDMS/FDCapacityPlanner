@@ -6,12 +6,14 @@ import logging
 import csv
 import sys
 import yaml
+import tempfile
 
 
 BLOCK_SIZES = ["64k", "128k", "256k", "512k", "1024k"]
 WRITE_MIXES = [100, 90, 80, 70, 60, 50, 40, 30, 20, 10, 0]
 TOTAL_LOGS = [1, 2, 4, 8, 12, 16, 20]
 LEADER_LOGS = [100, 70, 50, 30]
+NUM_FILES_TO_FILESIZE_MAPPING = ["1G", "512m", "384m", "256m", "128m", "64m", "64m", "64m"]
 FILE_SIZE = 1  # 2 gigabytes
 POISSON_RATE_PROCESS = "poisson"
 
@@ -23,16 +25,15 @@ directory=${directory}
 direct=1
 io_submit_mode=offload
 rate_process=${rate_process}
+filesize=${filesize}
 
 [kafka-sim-lead-replicas]
-size=${leader_size}G
 rw=rw
 rwmixwrite=${write_pct}
 nrfiles=${num_leaders}
 
 {% if num_followers > 0 %}
 [kafka-sim-follower-replicas]
-size=${follower_size}G
 rw=write
 nrfiles=${num_followers}
 {% endif %}\
@@ -68,26 +69,27 @@ def run_bench(bsizes, wmixes, tlogs, llogs, directory, rate_process, fio_path, r
                     for ll in llogs:
                         leaders = int(ceil(tl * (ll / 100.0)))
                         followers = tl - leaders
-                        leaders_size = FILE_SIZE
-                        followers_size = FILE_SIZE
+                        file_size = "1G"
 
-                        if 1 < tl < 8:
-                            leaders_size += leaders_size
-                            followers_size += followers_size
+                        if tl < 9:
+                            file_size = NUM_FILES_TO_FILESIZE_MAPPING[tl - 1]
+                        else:
+                            file_size = "32m"                            
 
-                        job_file = "{}-{}-{}-{}-{}-{}-{}.ini".format(bs, wm, tl, leaders, followers, FILE_SIZE,
+                        job_file = "{}/{}/{}-{}-{}-{}-{}-{}-{}.ini".format(tempfile.gettempdir(), 'csbench', bs, wm, tl, leaders, followers, file_size,
                                                                      rate_process)
                         with open(job_file, 'w') as f:
                             f.write(fio_job_template.render({
                                 'block_size': bs,
                                 'directory': directory,
                                 'rate_process': rate_process,
-                                'leader_size': leaders_size,
                                 'write_pct': wm,
                                 'num_leaders': leaders,
-                                'follower_size': followers_size,
-                                'num_followers': followers
+                                'num_followers': followers,
+                                'filesize': file_size
                             }))
+
+                        print 'Created fio job file:', job_file 
 
                         fio_job = FIOJob(job_file, fio_path)
                         fio_job.run()
