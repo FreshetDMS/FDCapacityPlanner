@@ -76,7 +76,11 @@ def run_bench(bsizes, wmixes, tlogs, llogs, directory, rate_process, fio_path, r
                         else:
                             file_size = "32m"                            
 
-                        job_file = "{}/{}/{}-{}-{}-{}-{}-{}-{}.ini".format(tempfile.gettempdir(), 'csbench', bs, wm, tl, leaders, followers, file_size,
+                        tmp_dir = "{}/{}".format(tempfile.gettempdir(), 'csbench')
+                        if not os.path.exists(tmp_dir):
+                            os.makedirs(tmp_dir)
+
+                        job_file = "{}/{}-{}-{}-{}-{}-{}-{}.ini".format(tmp_dir, bs, wm, tl, leaders, followers, file_size,
                                                                      rate_process)
                         with open(job_file, 'w') as f:
                             f.write(fio_job_template.render({
