@@ -7,6 +7,7 @@ import csv
 import sys
 import yaml
 import tempfile
+import time
 
 
 BLOCK_SIZES = ["64k", "128k", "256k", "512k", "1024k"]
@@ -108,6 +109,7 @@ def run_bench(bsizes, wmixes, tlogs, llogs, directory, rate_process, fio_path, r
                         result_writer.writerow(output)
                         r.flush()
                         delete_folder_content(directory)  # cleaning up data directory
+                        time.sleep(10)
 
 if __name__ == "__main__":
     # run_bench(["128k"], [60], [6], [50], '',
