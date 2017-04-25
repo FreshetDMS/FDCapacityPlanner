@@ -23,7 +23,9 @@ STORAGE_HOURLY_COST = [lambda (size, iops): 0.125 * size + 0.065 * iops, lambda 
 
 KBS_TO_MB = 1024
 
-HDD_IOPS_MODEL = joblib.load(os.path.join(os.path.dirname(__file__), 'models/hdd.dot-model.pkl'))
+# Does not support different io sizes. These models are for 128KB io operations
+HDD_IOPS_MODEL = joblib.load(os.path.join(os.path.dirname(__file__), 'models/hdd.pkl'))
+ST1_IOPS_MODEL = joblib.load(os.path.join(os.path.dirname(__file__), 'models/st1.pkl'))
 
 
 class InstanceType(Enum):
@@ -74,7 +76,9 @@ class StorageType(Enum):
         # Things to consider
         #   - Max IOPS change with the I/O operation size
         if self.value == 4:
-            return min(HDD_IOPS_MODEL.predict([[io_op_size_kb, 1, 0, 100]])[0], (storage_bw * 1024.0) / io_op_size_kb)
+            return min(HDD_IOPS_MODEL.predict([[1, 0, 100]])[0], (storage_bw * 1024.0) / io_op_size_kb)
+        elif self.value == 3:
+            return min(ST1_IOPS_MODEL.predict([[1, 0, 100]])[0], (storage_bw * 1024.0) / io_op_size_kb)
         else:
             return -1
 
@@ -83,7 +87,10 @@ class StorageType(Enum):
         # bandwidth is limited by dedicated storage bandwidth
         # We need to collect data for all the storage types for io size and number of logs
         if self.value == 4:
-            return min(HDD_IOPS_MODEL.predict([[io_op_size_kb, leaders, followers, write_pct]])[0],
+            return min(HDD_IOPS_MODEL.predict([[leaders, followers, write_pct]])[0],
+                       (storage_bw * 1024.0) / io_op_size_kb)
+        elif self.value == 3:
+            return min(ST1_IOPS_MODEL.predict([[leaders, followers, write_pct]])[0],
                        (storage_bw * 1024.0) / io_op_size_kb)
         else:
             raise RuntimeError("Effective iops calculation is not support for storage type: " + self.model())
@@ -223,7 +230,7 @@ class InstanceBin(Bin):
             total_storage_capacity = np.sum([total_storage_capacity, sb.capacity], axis=0)
             used_capacity = np.sum([used_capacity, sb.capacity_of_items], axis=0)
 
-        utilization = [float(c - r)/float(c) for c, r in zip(self.capacities, self.remaining)]
+        utilization = [float(c - r) / float(c) for c, r in zip(self.capacities, self.remaining)]
         utilization[1] = float(used_capacity[0]) / float(total_storage_capacity[0])
         utilization[2] = float(used_capacity[1]) / float(total_storage_capacity[1])
         return utilization
