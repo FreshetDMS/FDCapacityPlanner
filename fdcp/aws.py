@@ -15,7 +15,7 @@ INSTANCE_STORAGE_BW_LIST = [125, 250, 500, 1250, 700, 700, 700]
 INSTANCE_HOURLY_COST_LIST = [0.296, 0.592, 1.480, 2.369, 0.804, 1.608, 3.216]
 INSTANCE_DISK_COUNT = [0, 0, 0, 0, 6, 12, 24]
 
-STORAGE_MODEL_LIST = ["io1", "gp2", "st1", "d2hdd"]
+STORAGE_MODEL_LIST = ["io1", "gp2", "st1.dot", "d2hdd"]
 STORAGE_SIZE_LIST = [16 * 1024.0 * 1024.0, 16 * 1024.0 * 1024.0, 16 * 1024.0 * 1024.0, 2 * 1024.0 * 1024.0]
 STORAGE_HOURLY_COST_FACTOR = 1.0 / (24 * 30)
 STORAGE_HOURLY_COST = [lambda (size, iops): 0.125 * size + 0.065 * iops, lambda (size, iops): 0.10 * size,
@@ -23,7 +23,7 @@ STORAGE_HOURLY_COST = [lambda (size, iops): 0.125 * size + 0.065 * iops, lambda 
 
 KBS_TO_MB = 1024
 
-HDD_IOPS_MODEL = joblib.load(os.path.join(os.path.dirname(__file__), 'models/hdd-model.pkl'))
+HDD_IOPS_MODEL = joblib.load(os.path.join(os.path.dirname(__file__), 'models/hdd.dot-model.pkl'))
 
 
 class InstanceType(Enum):
