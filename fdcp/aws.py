@@ -11,7 +11,7 @@ INSTANCE_MODEL_LIST = ["m4.2xlarge", "m4.4xlarge", "m4.10xlarge", "m4.16xlarge",
 INSTANCE_CPU_LIST = [8, 16, 40, 64, 8, 16]
 INSTANCE_MEM_LIST = [32 * 1024, 64 * 1024, 160 * 1024, 256 * 1024, 61 * 1024, 122 * 1024, 244 * 1024]
 INSTANCE_NETWORK_BW_LIST = [118, 237, 1250, 2500, 118, 237, 1250]
-INSTANCE_STORAGE_BW_LIST = [125, 250, 500, 1250, 700, 700, 700]
+INSTANCE_STORAGE_BW_LIST = [125, 250, 500, 1250, 550, 550, 550]
 INSTANCE_HOURLY_COST_LIST = [0.296, 0.592, 1.480, 2.369, 0.804, 1.608, 3.216]
 INSTANCE_DISK_COUNT = [0, 0, 0, 0, 6, 12, 24]
 
@@ -23,7 +23,7 @@ STORAGE_HOURLY_COST = [lambda size, iops: 0.125 * size + 0.065 * iops, lambda si
                        lambda size, iops: 0.045 * size, lambda size, iops: 0, lambda size, iops: 0.045 * size,
                        lambda size, iops: 0]
 
-KBS_TO_MB = 1024
+MBS_TO_KB = 1024
 
 # Does not support different io sizes. These models are for 128KB io operations
 HDD_IOPS_MODEL = joblib.load(os.path.join(os.path.dirname(__file__), 'models/hdd.pkl'))
@@ -280,9 +280,10 @@ class InstanceBin(Bin):
     @classmethod
     def compute_initial_capacity(cls, instance_type, storage_type, io_op_size_kb):
         if instance_type == InstanceType.D2_2X or instance_type == InstanceType.D2_4X or instance_type == InstanceType.D2_8X:
-            iops = storage_type.iops(io_op_size_kb, instance_type.storage_bandwidth()) * instance_type.disk_count()
+            iops = min(storage_type.iops(io_op_size_kb, instance_type.storage_bandwidth()) * instance_type.disk_count(),
+                       (instance_type.storage_bandwidth() * MBS_TO_KB) / io_op_size_kb)
         else:
-            iops = (instance_type.storage_bandwidth() * KBS_TO_MB) / io_op_size_kb
+            iops = (instance_type.storage_bandwidth() * MBS_TO_KB) / io_op_size_kb
 
         return [instance_type.memory(),
                 storage_type.size() * InstanceBin.compute_volume_count(instance_type, storage_type, io_op_size_kb),
@@ -294,6 +295,6 @@ class InstanceBin(Bin):
         if storage_type == StorageType.D2HDD or storage_type == StorageType.D2HDDSTATIC:
             return instance_type.disk_count()
         else:
-            return int(ceil(((instance_type.storage_bandwidth() * KBS_TO_MB) / io_op_size_kb) /
+            return int(ceil(((instance_type.storage_bandwidth() * MBS_TO_KB) / io_op_size_kb) /
                             storage_type.iops(io_op_size_kb,
                                               instance_type.storage_bandwidth())))
