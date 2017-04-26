@@ -133,7 +133,7 @@ class StorageBin(object):
         self.capacity_of_items = [0, 0]
 
     def __repr__(self):
-        if self.num_leaders >= 1:
+        if self.num_leaders >= 1 and self.leader_read_io > 0:
             leader_write_pct = float(self.leader_total_io - self.leader_read_io) / self.leader_total_io
         else:
             leader_write_pct = 0
@@ -144,7 +144,7 @@ class StorageBin(object):
                     'type': self.storage_type,
                     'write_pct': leader_write_pct})
 
-    def add_item(self, item, read_pct):
+    def add_item(self, item, read_pct, leader=False):
         """
         Add a new item to storage bin.
         :param item: array representing IOPS and space requirements [size_req, iops_req]
@@ -152,10 +152,14 @@ class StorageBin(object):
         :return: None
         """
         self.num_logs += 1
-        if read_pct > 0.0:  # In the context of prediction we consider partitions without reads as followers
+
+        if leader:
             self.num_leaders += 1
+
+        if read_pct > 0.0:  # In the context of prediction we consider partitions without reads as followers
             self.leader_total_io += item[1]
             self.leader_read_io += item[1] * read_pct
+
         self.capacity_of_items = [x + y for x, y in zip(self.capacity_of_items, item)]
         self.remaining = [self.storage_type.size() - self.capacity_of_items[0],
                           self.effective_iops() - self.capacity_of_items[1]]
@@ -172,7 +176,7 @@ class StorageBin(object):
         return sum(self.remaining)
 
     def effective_iops(self):
-        if self.num_leaders >= 1:
+        if self.num_leaders >= 1 and self.leader_read_io > 0.0:
             leader_write_pct = float(self.leader_total_io - self.leader_read_io) / self.leader_total_io
         else:
             leader_write_pct = 0
@@ -203,7 +207,11 @@ class InstanceBin(Bin):
             # But if storage capacity is not enough going to the next bin may be the solution
             raise Exception('Storage capacity requirements exceed remaining storage capacity.')
 
-        sb.add_item([item.requirements[1], item.requirements[2]], item.reads)
+        leader = False
+        if isinstance(item, Partition):
+            leader = item.rid == 0
+
+        sb.add_item([item.requirements[1], item.requirements[2]], item.reads, leader)
 
         self.allocate_new_storage_bins_if_necessary()
 
@@ -271,13 +279,19 @@ class InstanceBin(Bin):
 
     @classmethod
     def compute_initial_capacity(cls, instance_type, storage_type, io_op_size_kb):
-        return [instance_type.memory(), storage_type.size(),
-                storage_type.iops(io_op_size_kb, instance_type.storage_bandwidth()),
+        if instance_type == InstanceType.D2_2X or instance_type == InstanceType.D2_4X or instance_type == InstanceType.D2_8X:
+            iops = storage_type.iops(io_op_size_kb, instance_type.storage_bandwidth()) * instance_type.disk_count()
+        else:
+            iops = (instance_type.storage_bandwidth() * KBS_TO_MB) / io_op_size_kb
+
+        return [instance_type.memory(),
+                storage_type.size() * InstanceBin.compute_volume_count(instance_type, storage_type, io_op_size_kb),
+                iops,
                 instance_type.network_bandwidth(), instance_type.network_bandwidth()]
 
     @classmethod
     def compute_volume_count(cls, instance_type, storage_type, io_op_size_kb):
-        if storage_type == StorageType.D2HDD:
+        if storage_type == StorageType.D2HDD or storage_type == StorageType.D2HDDSTATIC:
             return instance_type.disk_count()
         else:
             return int(ceil(((instance_type.storage_bandwidth() * KBS_TO_MB) / io_op_size_kb) /
