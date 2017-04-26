@@ -15,11 +15,13 @@ INSTANCE_STORAGE_BW_LIST = [125, 250, 500, 1250, 700, 700, 700]
 INSTANCE_HOURLY_COST_LIST = [0.296, 0.592, 1.480, 2.369, 0.804, 1.608, 3.216]
 INSTANCE_DISK_COUNT = [0, 0, 0, 0, 6, 12, 24]
 
-STORAGE_MODEL_LIST = ["io1", "gp2", "st1.dot", "d2hdd"]
-STORAGE_SIZE_LIST = [16 * 1024.0 * 1024.0, 16 * 1024.0 * 1024.0, 16 * 1024.0 * 1024.0, 2 * 1024.0 * 1024.0]
+STORAGE_MODEL_LIST = ["io1", "gp2", "st1", "d2hdd", "st1.static", "d2hdd.static"]
+STORAGE_SIZE_LIST = [16 * 1024.0 * 1024.0, 16 * 1024.0 * 1024.0, 16 * 1024.0 * 1024.0, 2 * 1024.0 * 1024.0,
+                     16 * 1024.0 * 1024.0, 2 * 1024.0 * 1024.0]
 STORAGE_HOURLY_COST_FACTOR = 1.0 / (24 * 30)
-STORAGE_HOURLY_COST = [lambda (size, iops): 0.125 * size + 0.065 * iops, lambda (size, iops): 0.10 * size,
-                       lambda (size, iops): 0.045 * size, lambda (size, iops): 0]
+STORAGE_HOURLY_COST = [lambda size, iops: 0.125 * size + 0.065 * iops, lambda size, iops: 0.10 * size,
+                       lambda size, iops: 0.045 * size, lambda size, iops: 0, lambda size, iops: 0.045 * size,
+                       lambda size, iops: 0]
 
 KBS_TO_MB = 1024
 
@@ -36,6 +38,9 @@ class InstanceType(Enum):
     D2_2X = 5
     D2_4X = 6
     D2_8X = 7
+
+    def __repr__(self):
+        return str(self.model())
 
     def model(self):
         return INSTANCE_MODEL_LIST[self.value - 1]
@@ -64,6 +69,11 @@ class StorageType(Enum):
     GP2 = 2
     ST1 = 3
     D2HDD = 4
+    ST1STATIC = 5
+    D2HDDSTATIC = 6
+
+    def __repr__(self):
+        return str(self.model())
 
     def model(self):
         return STORAGE_MODEL_LIST[self.value - 1]
@@ -76,9 +86,13 @@ class StorageType(Enum):
         # Things to consider
         #   - Max IOPS change with the I/O operation size
         if self.value == 4:
-            return min(HDD_IOPS_MODEL.predict([[1, 0, 100]])[0], (storage_bw * 1024.0) / io_op_size_kb)
+            return min(HDD_IOPS_MODEL.predict([[1, 0, 50]])[0], (storage_bw * 1024.0) / io_op_size_kb)
         elif self.value == 3:
-            return min(ST1_IOPS_MODEL.predict([[1, 0, 100]])[0], (storage_bw * 1024.0) / io_op_size_kb)
+            return min(ST1_IOPS_MODEL.predict([[1, 0, 50]])[0], (storage_bw * 1024.0) / io_op_size_kb)
+        elif self.value == 5:
+            return min(ST1_IOPS_MODEL.predict([[1, 0, 50]])[0], (storage_bw * 1024.0) / io_op_size_kb)
+        elif self.value == 6:
+            return min(HDD_IOPS_MODEL.predict([[1, 0, 50]])[0], (storage_bw * 1024.0) / io_op_size_kb)
         else:
             return -1
 
@@ -92,6 +106,10 @@ class StorageType(Enum):
         elif self.value == 3:
             return min(ST1_IOPS_MODEL.predict([[leaders, followers, write_pct]])[0],
                        (storage_bw * 1024.0) / io_op_size_kb)
+        elif self.value == 5:
+            return min(ST1_IOPS_MODEL.predict([[1, 0, 50]])[0], (storage_bw * 1024.0) / io_op_size_kb)
+        elif self.value == 6:
+            return min(HDD_IOPS_MODEL.predict([[1, 0, 50]])[0], (storage_bw * 1024.0) / io_op_size_kb)
         else:
             raise RuntimeError("Effective iops calculation is not support for storage type: " + self.model())
 
@@ -113,6 +131,18 @@ class StorageBin(object):
         self.remaining = [self.storage_type.size(),
                           self.storage_type.iops(io_op_size_kb, instance_type.storage_bandwidth())]
         self.capacity_of_items = [0, 0]
+
+    def __repr__(self):
+        if self.num_leaders >= 1:
+            leader_write_pct = float(self.leader_total_io - self.leader_read_io) / self.leader_total_io
+        else:
+            leader_write_pct = 0
+        return str({'logs': self.num_logs,
+                    'leaders': self.num_leaders,
+                    'remaining_capacity': self.remaining,
+                    'capacity': self.capacity,
+                    'type': self.storage_type,
+                    'write_pct': leader_write_pct})
 
     def add_item(self, item, read_pct):
         """
@@ -153,10 +183,7 @@ class StorageBin(object):
         return self.effective_iops() * self.io_op_size_kb
 
     def hourly_cost(self):
-        if self.storage_type == StorageType.D2HDD:
-            return 0
-        else:
-            raise RuntimeError('Storage cost is not support yet for storage type: ' + self.storage_type)
+        return self.storage_type.hourly_cost(self.capacity_of_items[0], self.capacity_of_items[1])
 
 
 class InstanceBin(Bin):
@@ -236,7 +263,11 @@ class InstanceBin(Bin):
         return utilization
 
     def __repr__(self):
-        return str([self.utilization(), self.capacities, self.remaining])
+        return str({'type': self.instance_type,
+                    'utilization': self.utilization(),
+                    'capacity': self.capacities,
+                    'remaining_capacity': self.remaining,
+                    'storage_bins': self.storage_bins})
 
     @classmethod
     def compute_initial_capacity(cls, instance_type, storage_type, io_op_size_kb):

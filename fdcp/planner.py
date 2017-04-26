@@ -123,9 +123,10 @@ class LogStoreCapacityPlanner(object):
 
 if __name__ == "__main__":
     workload = LogStoreWorkload()
-    workload.add_topic(Topic("t1", 100000, 124, 5, 2, 3, 1, 200000, 10, 48))
-    workload.add_topic(Topic("t2", 200000, 234, 10, 2, 2, 1, 400000, 15, 48))
-    cp = LogStoreCapacityPlanner([InstanceBin(InstanceType.D2_2X, StorageType.D2HDD)], workload)
+    workload.add_topic(Topic("t1", 100000, 124, 5, 2, 1, 0, 200000, 10, 48))
+    workload.add_topic(Topic("t2", 200000, 234, 10, 2, 1, 1, 400000, 15, 48))
+    cp = LogStoreCapacityPlanner([InstanceBin(InstanceType.D2_2X, StorageType.D2HDDSTATIC)], workload)
     p = cp.plan()
-    print p['assignment'], p['bin-type']
+    print p['assignment']
+    print p['bin-type']
     print 'Bin Count:', len(p['assignment'].bins)

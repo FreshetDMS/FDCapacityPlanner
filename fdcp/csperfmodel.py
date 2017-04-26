@@ -10,13 +10,10 @@ import os
 import logging
 from terminaltables import AsciiTable
 
-DATA_DIR = "/Users/mpathira/PhD/Code/FreshetDMS/FDCapacityPlanner/results/dynamic-capacity/hdd.dot"
-
 
 def prepare_data(training_data_file):
     raw_data = pd.read_csv(training_data_file)
-    raw_data['block_size'] = raw_data['block_size'].apply(lambda bs: int(bs[:3]))
-    return raw_data[['block_size', 'leaders', 'followers', 'write_pct']].copy().as_matrix(), raw_data[
+    return raw_data[['leaders', 'followers', 'write_pct']].copy().as_matrix(), raw_data[
         'iops'].copy().as_matrix()
 
 
@@ -26,7 +23,7 @@ def main(training_data_file, model_output, max_depth, test_data_file):
     regressor.fit(x, y)
 
     regr_tree_dot = export_graphviz(regressor, out_file=None,
-                                    feature_names=['block_size', 'leaders', 'followers', 'write_pct'])
+                                    feature_names=['leaders', 'followers', 'write_pct'])
     regr_tree_src = Source(regr_tree_dot)
     regr_tree_src.render(model_output)
     joblib.dump(regressor, model_output + '.pkl')
