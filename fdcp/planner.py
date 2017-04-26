@@ -3,6 +3,7 @@ from fdcp.aws import *
 import logging
 import sys
 from sets import Set
+from random import shuffle
 
 logging.basicConfig(format='%(asctime)s %(message)s')
 logging.getLogger().addHandler(logging.StreamHandler())
@@ -99,7 +100,9 @@ class LogStoreCapacityPlanner(object):
         for i in range(lb, len(self.node_types)):
             node = self.node_types[i]
             logger.info("Running optimize with bin type: " + str(node))
-            assignment = optimize(self.workload.partitions(), node, use_dp=False, aws=True)
+            items = self.workload.partitions()
+            shuffle(items)
+            assignment = optimize(items, node, use_dp=False, aws=True)
             cost = len(assignment.bins) * node.hourly_cost()
             logger.info("Optimal bins: " + str(len(assignment.bins)) + " and cost: " + str(cost))
             if cost < best_cost:
