@@ -4,6 +4,7 @@ import logging
 import sys
 from sets import Set
 from random import shuffle
+from timeit import default_timer as timer
 
 logging.basicConfig(format='%(asctime)s %(message)s')
 logging.getLogger().addHandler(logging.StreamHandler())
@@ -126,10 +127,27 @@ class LogStoreCapacityPlanner(object):
 
 if __name__ == "__main__":
     workload = LogStoreWorkload()
-    workload.add_topic(Topic("t1", 100000, 124, 5, 2, 1, 0, 200000, 10, 48))
-    workload.add_topic(Topic("t2", 200000, 234, 10, 2, 1, 1, 400000, 15, 48))
-    cp = LogStoreCapacityPlanner([InstanceBin(InstanceType.D2_2X, StorageType.D2HDDSTATIC)], workload)
-    p = cp.plan()
-    print p['assignment']
-    print p['bin-type']
-    print 'Bin Count:', len(p['assignment'].bins)
+    workload.add_topic(Topic("t1", 100000, 124, 10, 2, 1, 0, 200000, 10, 48))
+    workload.add_topic(Topic("t2", 200000, 234, 10, 2, 1, 1, 400000, 35, 48))
+    workload.add_topic(Topic("t2", 200000, 234, 20, 2, 2, 2, 800000, 30, 48))
+    workload.add_topic(Topic("t2", 200000, 234, 20, 2, 2, 2, 800000, 30, 48))
+    workload.add_topic(Topic("t2", 200000, 234, 20, 2, 2, 2, 800000, 30, 48))
+    cp = LogStoreCapacityPlanner([InstanceBin(InstanceType.D2_2X, StorageType.D2HDD)], workload)
+    cp.plan()
+
+    iterations = 20
+    elpased_time = 0
+    i = 0
+
+    for i in range(0, iterations):
+        start = timer()
+        cp = LogStoreCapacityPlanner([InstanceBin(InstanceType.D2_2X, StorageType.D2HDD)], workload)
+        cp.plan()
+        elpased_time += timer() - start
+        i += 1
+
+    print 'iterations:', i
+    print 'mean execution time:', elpased_time / float(i)
+    # print p['assignment']
+    # print p['bin-type']
+    # print 'Bin Count:', len(p['assignment'].bins)

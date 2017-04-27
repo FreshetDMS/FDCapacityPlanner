@@ -21,7 +21,7 @@ setup(
     test_suite='nose.collector',
     tests_require=['nose'],
     include_package_data=True,
-    scripts=['bin/fdcp'],
+    # scripts=['bin/fdcp'],
     url='https://github.com/FreshetDMS/FDCapacityPlanner',
     license='GPL',
     long_description=open('README.md').read(),

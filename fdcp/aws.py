@@ -1,5 +1,5 @@
 from enum import Enum
-from fdcp import Partition
+from . import Partition
 from math import ceil
 from sklearn.externals import joblib
 from vsvbp.container import Bin
@@ -205,7 +205,9 @@ class InstanceBin(Bin):
         if sb is None:
             # There is a possibility of adding a new storage bin and adjusting remaining storage bw as needed.
             # But if storage capacity is not enough going to the next bin may be the solution
-            raise Exception('Storage capacity requirements exceed remaining storage capacity.')
+            raise Exception(
+                'Storage capacity requirements exceed remaining storage capacity. Item: ' + str(item) + " Bin: " + str(
+                    self))
 
         leader = False
         if isinstance(item, Partition):
