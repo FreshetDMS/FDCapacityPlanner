@@ -5,6 +5,7 @@ from sklearn.externals import joblib
 from vsvbp.container import Bin
 import os
 import numpy as np
+import uuid
 
 INSTANCE_MODEL_LIST = ["m4.2xlarge", "m4.4xlarge", "m4.10xlarge", "m4.16xlarge", "d2.2xlarge", "d2.4xlarge",
                        "d2.8xlarge"]
@@ -118,7 +119,8 @@ class StorageType(Enum):
 
 
 class StorageBin(object):
-    def __init__(self, storage_type, instance_type, io_op_size_kb):
+    def __init__(self, storage_type, instance_type, io_op_size_kb, iid):
+        self.iid = iid
         self.storage_type = storage_type
         self.instance_type = instance_type
         self.io_op_size_kb = io_op_size_kb
@@ -194,10 +196,11 @@ class InstanceBin(Bin):
     def __init__(self, instance_type, storage_type, io_op_size_kb=128):
         super(InstanceBin, self).__init__(
             InstanceBin.compute_initial_capacity(instance_type, storage_type, io_op_size_kb))
+        self.bin_id = str(uuid.uuid4())
         self.instance_type = instance_type
         self.storage_type = storage_type
         self.io_op_size_kb = io_op_size_kb
-        self.storage_bins = [StorageBin(storage_type, instance_type, io_op_size_kb) for i in
+        self.storage_bins = [StorageBin(storage_type, instance_type, io_op_size_kb, self.bin_id) for i in
                              range(InstanceBin.compute_volume_count(instance_type, storage_type, io_op_size_kb))]
 
     def insert(self, item):
@@ -231,6 +234,12 @@ class InstanceBin(Bin):
 
         self.items.append(item)
 
+    def empty(self):
+        super(InstanceBin, self).empty()
+        self.storage_bins = [StorageBin(self.storage_type, self.instance_type, self.io_op_size_kb, self.bin_id) for i in
+                             range(InstanceBin.compute_volume_count(self.instance_type, self.storage_type,
+                                                                    self.io_op_size_kb))]
+
     def add(self, item):
         if not isinstance(item, Partition):
             raise Exception('Only items of type Partition is supported at this stage.')
@@ -245,7 +254,8 @@ class InstanceBin(Bin):
         if self.storage_type != StorageType.D2HDD:
             effective_storage_throughput = sum(sb.effective_throughput() for sb in self.storage_bins)
             if effective_storage_throughput < self.instance_type.storage_bandwidth():
-                self.storage_bins.append(StorageBin(self.storage_type, self.instance_type, self.io_op_size_kb))
+                self.storage_bins.append(
+                    StorageBin(self.storage_type, self.instance_type, self.io_op_size_kb, self.bin_id))
 
     def storage_bin_count(self):
         return len(self.storage_bins)
