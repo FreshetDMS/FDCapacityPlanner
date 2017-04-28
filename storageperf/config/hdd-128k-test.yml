@@ -1,0 +1,19 @@
+block-sizes:
+  - 128k
+write-mixes:
+  - 84
+  - 66
+  - 38
+total-logs:
+  - 9
+  - 13
+  - 19
+  - 26
+  - 34
+leader-logs:
+  - 38
+  - 48
+  - 53
+data-directory: /media/disk1
+rate-process: poisson
+fio-path: /usr/local/bin/fio

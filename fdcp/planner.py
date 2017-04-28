@@ -3,8 +3,9 @@ from fdcp.aws import *
 import logging
 import sys
 from sets import Set
-from random import shuffle
+from random import shuffle, randint, seed
 from timeit import default_timer as timer
+import itertools
 
 logging.basicConfig(format='%(asctime)s %(message)s')
 logging.getLogger().addHandler(logging.StreamHandler())
@@ -123,31 +124,45 @@ class LogStoreCapacityPlanner(object):
                 else:
                     partitions.add(i.pid)
 
+
 # TODO: Need to understand Kafka network utilization
 
 if __name__ == "__main__":
-    workload = LogStoreWorkload()
-    workload.add_topic(Topic("t1", 100000, 124, 10, 2, 1, 0, 200000, 10, 48))
-    workload.add_topic(Topic("t2", 200000, 234, 10, 2, 1, 1, 400000, 35, 48))
-    workload.add_topic(Topic("t2", 200000, 234, 20, 2, 2, 2, 800000, 30, 48))
-    workload.add_topic(Topic("t2", 200000, 234, 20, 2, 2, 2, 800000, 30, 48))
-    workload.add_topic(Topic("t2", 200000, 234, 20, 2, 2, 2, 800000, 30, 48))
-    cp = LogStoreCapacityPlanner([InstanceBin(InstanceType.D2_2X, StorageType.D2HDD)], workload)
-    cp.plan()
+    retention_period = 36
+    consumer_lag = 40
+    per_partition_arrival_rate = 1000000
+    consumer_count = 3
+    min_replay_count = 2
+    replication_factor = 2
+    message_size = 200
+    log_count = [3200, 6400]
+    partition_count = [400, 800]
 
-    iterations = 20
-    elpased_time = 0
-    i = 0
+    seed(12)
 
-    for i in range(0, iterations):
-        start = timer()
+    for p, l in itertools.izip(partition_count, log_count):
+        workload = LogStoreWorkload()
+        for k in range(0, l / p):
+            arrival_rate = (per_partition_arrival_rate / message_size) * p
+            replay_rate = arrival_rate * 3
+            workload.add_topic(Topic("topic-{}".format(k), arrival_rate, message_size, p, replication_factor,
+                                     consumer_count, min_replay_count, replay_rate,
+                                     consumer_lag, retention_period))
+
         cp = LogStoreCapacityPlanner([InstanceBin(InstanceType.D2_2X, StorageType.D2HDD)], workload)
-        cp.plan()
-        elpased_time += timer() - start
-        i += 1
+        p = cp.plan()
 
-    print 'iterations:', i
-    print 'mean execution time:', elpased_time / float(i)
-    # print p['assignment']
-    # print p['bin-type']
-    # print 'Bin Count:', len(p['assignment'].bins)
+        iterations = 1
+        elpased_time = 0
+
+        for i in range(0, iterations):
+            start = timer()
+            cp = LogStoreCapacityPlanner([InstanceBin(InstanceType.D2_2X, StorageType.D2HDD)], workload)
+            p = cp.plan()
+            elpased_time += timer() - start
+
+        print 'mean execution time:', elpased_time / float(iterations)
+        print 'items:', len(p['assignment'].items)
+        print 'bins:', len(p['assignment'].bins)
+        print '----------------------------------\n'
+
