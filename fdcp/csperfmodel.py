@@ -1,6 +1,5 @@
 import pandas as pd
 from sklearn.tree import DecisionTreeRegressor, export_graphviz
-from sklearn.linear_model import ElasticNet, Lasso, Ridge, LinearRegression
 from graphviz import Source
 from sklearn.externals import joblib
 from sklearn.svm import SVR
@@ -9,6 +8,7 @@ import sys
 import os
 import logging
 from terminaltables import AsciiTable
+import numpy as np
 
 
 def prepare_data(training_data_file):
@@ -32,16 +32,11 @@ def main(training_data_file, model_output, max_depth, test_data_file):
 
     if test_data_file is not None:
         test_data_x, test_data_y = prepare_data(test_data_file)
-        r = [['independent vars', 'prediction', 'actual', 'error']]
-        for idx, t in enumerate(test_data_x):
-            predicted_iops = persisted_regressor.predict(t.reshape(1, -1))
-            error = test_data_y[idx] - predicted_iops[0]
-            r.append([t, predicted_iops[0], test_data_y[idx], float(error) / test_data_y[idx]])
-
-        print AsciiTable(r).table
+        print 'mean squared erro:', np.abs(persisted_regressor.predict(test_data_x) - test_data_y)
+        print 'variance score:', persisted_regressor.score(test_data_x, test_data_y)
 
 
-def train_model_with_cross_validation(training_data, splits=10, depth=10):
+def train_model_with_cross_validation(training_data, scoring_fn, splits=10, depth=10):
     data = pd.read_csv(training_data)
 
     # data = data[data.iops > 250]
@@ -49,11 +44,11 @@ def train_model_with_cross_validation(training_data, splits=10, depth=10):
     X = data[['leaders', 'followers', 'write_pct']].copy().as_matrix()
     y = data['iops'].copy().as_matrix()
     seed = 8
-    kFold = model_selection.KFold(n_splits=splits, random_state=seed)
+    kFold = model_selection.KFold(n_splits=splits, random_state=seed, shuffle=True)
+    # shflSplit = model_selection.ShuffleSplit(n_splits=10, test_size=0.2, random_state=12)
     model = DecisionTreeRegressor(max_depth=depth)
 
-    scoring = 'r2'
-    results = model_selection.cross_val_score(model, X, y, cv=kFold, scoring=scoring)
+    results = model_selection.cross_val_score(model, X, y, cv=kFold, scoring=scoring_fn)
     print(results)
     print(results.mean())
 
@@ -76,8 +71,9 @@ if __name__ == "__main__":
             main(sys.argv[2], sys.argv[3], int(sys.argv[4]) if len(sys.argv) > 4 else 5,
                  sys.argv[5] if len(sys.argv) > 5 else None)
         elif command == "cv":
-            train_model_with_cross_validation(sys.argv[2], int(sys.argv[3]) if len(sys.argv) > 3 else 10,
-                                              int(sys.argv[4]) if len(sys.argv) > 4 else 10)
+            train_model_with_cross_validation(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else 'r2',
+                                              int(sys.argv[4]) if len(sys.argv) > 4 else 10,
+                                              int(sys.argv[5]) if len(sys.argv) > 5 else 10)
         else:
             logging.error("Unknown command " + command)
             exit(-1)

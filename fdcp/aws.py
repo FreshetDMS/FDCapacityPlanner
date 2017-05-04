@@ -6,10 +6,11 @@ from vsvbp.container import Bin
 import os
 import numpy as np
 import uuid
+import logging
 
 INSTANCE_MODEL_LIST = ["m4.2xlarge", "m4.4xlarge", "m4.10xlarge", "m4.16xlarge", "d2.2xlarge", "d2.4xlarge",
                        "d2.8xlarge"]
-INSTANCE_CPU_LIST = [8, 16, 40, 64, 8, 16]
+INSTANCE_CPU_LIST = [8, 16, 40, 64, 8, 16, 36]
 INSTANCE_MEM_LIST = [32 * 1024, 64 * 1024, 160 * 1024, 256 * 1024, 61 * 1024, 122 * 1024, 244 * 1024]
 INSTANCE_NETWORK_BW_LIST = [118, 237, 1250, 2500, 118, 237, 1250]
 INSTANCE_STORAGE_BW_LIST = [125, 250, 500, 1250, 550, 550, 550]
@@ -189,7 +190,7 @@ class StorageBin(object):
         return self.effective_iops() * self.io_op_size_kb
 
     def hourly_cost(self):
-        return self.storage_type.hourly_cost(self.capacity_of_items[0], self.capacity_of_items[1])
+        return self.storage_type.hourly_cost(self.capacity_of_items[0] / (1024 * 1024), self.capacity_of_items[1])
 
 
 class InstanceBin(Bin):
@@ -208,9 +209,9 @@ class InstanceBin(Bin):
         if sb is None:
             # There is a possibility of adding a new storage bin and adjusting remaining storage bw as needed.
             # But if storage capacity is not enough going to the next bin may be the solution
-            raise Exception(
-                'Storage capacity requirements exceed remaining storage capacity. Item: ' + str(item) + " Bin: " + str(
-                    self))
+            # logging.error('Storage capacity requirements exceed remaining storage capacity. Item: ' + str(item) +
+            #               " Bin: " + str(self))
+            return False
 
         leader = False
         if isinstance(item, Partition):
@@ -233,6 +234,7 @@ class InstanceBin(Bin):
         self.remaining[2] = max_sb.remaining[1]
 
         self.items.append(item)
+        return True
 
     def empty(self):
         super(InstanceBin, self).empty()
@@ -245,8 +247,7 @@ class InstanceBin(Bin):
             raise Exception('Only items of type Partition is supported at this stage.')
 
         if self.feasible(item):
-            self.insert(item)
-            return True
+            return self.insert(item)
         return False
 
     def allocate_new_storage_bins_if_necessary(self):
@@ -261,7 +262,8 @@ class InstanceBin(Bin):
         return len(self.storage_bins)
 
     def hourly_cost(self):
-        return self.instance_type.hourly_cost() + sum([sb.hourly_cost() for sb in self.storage_bins])
+        return self.instance_type.hourly_cost() + sum(
+            [sb.hourly_cost() if sb.num_logs > 0 else 0 for sb in self.storage_bins])
 
     # Private methods
     def select_storage_bin(self, size_req, iops_req):

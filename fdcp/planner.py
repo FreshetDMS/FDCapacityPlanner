@@ -87,7 +87,7 @@ class LogStoreCapacityPlanner(object):
         max_network_in = max(partitions, key=lambda p: p.network_in).network_in
         max_storage_bw = max(partitions, key=lambda p: p.storage_bw).storage_bw
         max_mem = max(partitions, key=lambda p: p.memory).memory
-
+        print max_network_out, max_network_in, max_storage_bw, max_mem
         for i, n in enumerate(self.node_types):
             if n.instance_type.memory() > max_mem and n.instance_type.network_bandwidth() > max_network_in and \
                             n.instance_type.network_bandwidth() > max_network_out and \
@@ -105,7 +105,7 @@ class LogStoreCapacityPlanner(object):
             items = self.workload.partitions()
             shuffle(items)
             assignment = optimize(items, node, use_dp=False, aws=True)
-            cost = len(assignment.bins) * node.hourly_cost()
+            cost = sum([b.hourly_cost() for b in assignment.bins])
             logger.info("Optimal bins: " + str(len(assignment.bins)) + " and cost: " + str(cost))
             if cost < best_cost:
                 best_cost = cost
