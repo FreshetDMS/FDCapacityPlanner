@@ -39,7 +39,8 @@ class Topic(object):
         size_req = per_partition_produce_rate_mbps * self.retention_period * 3600
         per_partition_replay_rate = ((self.mean_replay_rate * self.mean_msg_size) / MILLION) / self.num_partitions
         per_partition_mem_requirements = max(self.max_consumer_lag * per_partition_produce_rate_mbps,
-                                             FLUSH_DELAY_SECONDS * per_partition_produce_rate_mbps)
+                                             FLUSH_DELAY_SECONDS * per_partition_produce_rate_mbps) + \
+                                        per_partition_replay_rate
         reads = self.num_replays * per_partition_replay_rate
         ebs_bw_requirement = per_partition_produce_rate_mbps + reads
         reads_pct = float(reads) / ebs_bw_requirement
@@ -86,15 +87,18 @@ class LogStoreCapacityPlanner(object):
         max_network_out = max(partitions, key=lambda p: p.network_out).network_out
         max_network_in = max(partitions, key=lambda p: p.network_in).network_in
         max_storage_bw = max(partitions, key=lambda p: p.storage_bw).storage_bw
+        max_size = max(partitions, key=lambda p: p.size).size
         max_mem = max(partitions, key=lambda p: p.memory).memory
-        print max_network_out, max_network_in, max_storage_bw, max_mem
+        print max_network_out, max_network_in, max_storage_bw, max_size, max_mem
         for i, n in enumerate(self.node_types):
             if n.instance_type.memory() > max_mem and n.instance_type.network_bandwidth() > max_network_in and \
                             n.instance_type.network_bandwidth() > max_network_out and \
-                            n.instance_type.storage_bandwidth() > max_storage_bw:
+                            n.instance_type.storage_bandwidth() > max_storage_bw and \
+                    n.instance_type.max_storage_size() > max_size:
                 return i
 
     def plan(self):
+        plans = []
         best_cost = sys.maxint
         best_config = None
         lb = self.find_bin_lower_bound()
@@ -105,14 +109,15 @@ class LogStoreCapacityPlanner(object):
             items = self.workload.partitions()
             shuffle(items)
             assignment = optimize(items, node, use_dp=False, aws=True)
-            cost = sum([b.hourly_cost() for b in assignment.bins])
+            cost = sum([b.hourly_cost() if sum(b.utilization()) > 0 else 0 for b in assignment.bins])
+            plans.append((assignment, node, cost))
             logger.info("Optimal bins: " + str(len(assignment.bins)) + " and cost: " + str(cost))
             if cost < best_cost:
                 best_cost = cost
                 best_instance = node
                 best_config = assignment
         LogStoreCapacityPlanner.verify(best_config)
-        return {'assignment': best_config, 'bin-type': best_instance}
+        return {'assignment': best_config, 'bin-type': best_instance, 'other-plans': plans}
 
     @classmethod
     def verify(cls, assignment):
@@ -127,7 +132,7 @@ class LogStoreCapacityPlanner(object):
 
 # TODO: Need to understand Kafka network utilization
 
-if __name__ == "__main__":
+def bench():
     retention_period = 36
     consumer_lag = 40
     per_partition_arrival_rate = 1000000
@@ -165,4 +170,3 @@ if __name__ == "__main__":
         print 'items:', len(p['assignment'].items)
         print 'bins:', len(p['assignment'].bins)
         print '----------------------------------\n'
-

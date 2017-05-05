@@ -59,6 +59,12 @@ class InstanceType(Enum):
     def storage_bandwidth(self):
         return INSTANCE_STORAGE_BW_LIST[self.value - 1]
 
+    def max_storage_size(self):
+        if self.value == 1 or self.value == 2 or self.value == 3 or self.value == 4:
+            return 16 * 1024.0 * 1024.0
+        else:
+            return 2 * 1024.0 * 1024.0
+
     def hourly_cost(self):
         return INSTANCE_HOURLY_COST_LIST[self.value - 1]
 
@@ -115,7 +121,44 @@ class StorageType(Enum):
         else:
             raise RuntimeError("Effective iops calculation is not support for storage type: " + self.model())
 
-    def hourly_cost(self, size, provisioned_iops):
+    def hourly_cost(self, size, provisioned_iops, io_op_size_kb):
+        # Cost calculation for EBS instances should find minimum size required to provide the said IOPS and then decide
+        # cost based on that
+        dr = io_op_size_kb * provisioned_iops
+
+        if self.value == 3 or self.value == 5:
+            if dr < 20:
+                nsize = 0.5 * 1000
+            elif dr < 40:
+                nsize = 1 * 1000
+            elif dr < 80:
+                nsize = 2 * 1000
+            elif dr < 120:
+                nsize = 3 * 1000
+            elif dr < 160:
+                nsize = 4 * 1000
+            elif dr < 200:
+                nsize = 5 * 1000
+            elif dr < 240:
+                nsize = 6 * 1000
+            elif dr < 280:
+                nsize = 7 * 1000
+            elif dr < 320:
+                nsize = 8 * 1000
+            elif dr < 360:
+                nsize = 9 * 1000
+            elif dr < 400:
+                nsize = 10 * 1000
+            elif dr < 440:
+                nsize = 11 * 1000
+            elif dr < 480:
+                nsize = 12 * 1000
+            else:
+                nsize = 12.5 * 1000
+
+            if size < nsize:
+                size = nsize
+
         return STORAGE_HOURLY_COST_FACTOR * STORAGE_HOURLY_COST[self.value - 1](size, provisioned_iops)
 
 
@@ -138,6 +181,8 @@ class StorageBin(object):
     def __repr__(self):
         if self.num_leaders >= 1 and self.leader_read_io > 0:
             leader_write_pct = float(self.leader_total_io - self.leader_read_io) / self.leader_total_io
+        elif self.leader_read_io == 0.0:
+            leader_write_pct = 100
         else:
             leader_write_pct = 0
         return str({'logs': self.num_logs,
@@ -166,6 +211,7 @@ class StorageBin(object):
         self.capacity_of_items = [x + y for x, y in zip(self.capacity_of_items, item)]
         self.remaining = [self.storage_type.size() - self.capacity_of_items[0],
                           self.effective_iops() - self.capacity_of_items[1]]
+        self.capacity[1] = self.effective_iops()
 
     def feasible(self, item):
         for i, c in enumerate(item):
@@ -181,6 +227,8 @@ class StorageBin(object):
     def effective_iops(self):
         if self.num_leaders >= 1 and self.leader_read_io > 0.0:
             leader_write_pct = float(self.leader_total_io - self.leader_read_io) / self.leader_total_io
+        if self.leader_read_io == 0.0:
+            leader_write_pct = 100
         else:
             leader_write_pct = 0
         return self.storage_type.effective_iops(self.io_op_size_kb, self.instance_type.storage_bandwidth(),
@@ -190,7 +238,8 @@ class StorageBin(object):
         return self.effective_iops() * self.io_op_size_kb
 
     def hourly_cost(self):
-        return self.storage_type.hourly_cost(self.capacity_of_items[0] / (1024 * 1024), self.capacity_of_items[1])
+        return self.storage_type.hourly_cost(self.capacity_of_items[0] / (1024 * 1024), self.capacity_of_items[1],
+                                             self.io_op_size_kb)
 
 
 class InstanceBin(Bin):
@@ -201,6 +250,7 @@ class InstanceBin(Bin):
         self.instance_type = instance_type
         self.storage_type = storage_type
         self.io_op_size_kb = io_op_size_kb
+        self.max_storage_bin_count = InstanceBin.compute_max_volume_count(instance_type, storage_type, io_op_size_kb)
         self.storage_bins = [StorageBin(storage_type, instance_type, io_op_size_kb, self.bin_id) for i in
                              range(InstanceBin.compute_volume_count(instance_type, storage_type, io_op_size_kb))]
 
@@ -225,16 +275,26 @@ class InstanceBin(Bin):
             if i != 1 and i != 2:
                 self.remaining[i] -= req
 
-        max_sb = next(iter(sorted(self.storage_bins, key=lambda sbin: sbin.vector_sum_of_remaining(), reverse=True)),
-                      None)
-        if max_sb is None:
-            raise Exception('Storage bin with max remaining capacity cannot be none.')
+        max_sb = self.max_sb_remaining()
 
         self.remaining[1] = max_sb.remaining[0]
         self.remaining[2] = max_sb.remaining[1]
 
         self.items.append(item)
         return True
+
+    def max_sb_remaining(self):
+        # If we are using EBS volumes, maximum remaining should be new vol capacity if current storage bin count is less
+        # than max possible storage bin count
+        max_sb = next(iter(sorted(self.storage_bins, key=lambda sbin: sbin.vector_sum_of_remaining(), reverse=True)),
+                      None)
+        if max_sb is None:
+            raise Exception('Storage bin with max remaining capacity cannot be none.')
+
+        if self.storage_bin_count() < self.max_storage_bin_count:
+            return StorageBin(self.storage_type, self.instance_type, self.io_op_size_kb, self.bin_id)
+        else:
+            return max_sb
 
     def empty(self):
         super(InstanceBin, self).empty()
@@ -252,11 +312,12 @@ class InstanceBin(Bin):
 
     def allocate_new_storage_bins_if_necessary(self):
         # We can do this because effective throughput goes down as we add more logs to storage bin
-        if self.storage_type != StorageType.D2HDD:
+        if self.storage_type != StorageType.D2HDD and self.storage_bin_count() == self.max_storage_bin_count:
             effective_storage_throughput = sum(sb.effective_throughput() for sb in self.storage_bins)
             if effective_storage_throughput < self.instance_type.storage_bandwidth():
                 self.storage_bins.append(
                     StorageBin(self.storage_type, self.instance_type, self.io_op_size_kb, self.bin_id))
+                self.max_storage_bin_count += 1
 
     def storage_bin_count(self):
         return len(self.storage_bins)
@@ -270,14 +331,22 @@ class InstanceBin(Bin):
         for sb in sorted(self.storage_bins, key=lambda sbin: sbin.vector_sum_of_remaining()):
             if sb.feasible([size_req, iops_req]):
                 return sb
-        return None
+
+        if self.storage_bin_count() < self.max_storage_bin_count:
+            self.storage_bins.append(StorageBin(self.storage_type, self.instance_type, self.io_op_size_kb, self.bin_id))
+        else:
+            return None
+
+        return self.select_storage_bin(size_req, iops_req)
 
     def utilization(self):
         total_storage_capacity = [0, 0]
         used_capacity = [0, 0]
         for sb in self.storage_bins:
-            total_storage_capacity = np.sum([total_storage_capacity, sb.capacity], axis=0)
-            used_capacity = np.sum([used_capacity, sb.capacity_of_items], axis=0)
+            total_storage_capacity[0] += sb.capacity[0]
+            total_storage_capacity[1] += sb.capacity[1]
+            used_capacity[0] += sb.capacity_of_items[0]
+            used_capacity[1] += sb.capacity_of_items[1]
 
         utilization = [float(c - r) / float(c) for c, r in zip(self.capacities, self.remaining)]
         utilization[1] = float(used_capacity[0]) / float(total_storage_capacity[0])
@@ -306,6 +375,13 @@ class InstanceBin(Bin):
 
     @classmethod
     def compute_volume_count(cls, instance_type, storage_type, io_op_size_kb):
+        if storage_type == StorageType.D2HDD or storage_type == StorageType.D2HDDSTATIC:
+            return instance_type.disk_count()
+        else:
+            return 1
+
+    @classmethod
+    def compute_max_volume_count(cls, instance_type, storage_type, io_op_size_kb):
         if storage_type == StorageType.D2HDD or storage_type == StorageType.D2HDDSTATIC:
             return instance_type.disk_count()
         else:
